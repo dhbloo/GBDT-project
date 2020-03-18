@@ -30,7 +30,8 @@ class BinomialDeviance():
             return numerator / denominator
 
     def update_f_m(self, f_m_1, tree, learning_rate):   
-        f_m = np.zeros(len(f_m_1)) + f_m_1
+        #f_m = np.zeros(len(f_m_1)) + f_m_1
+        f_m = f_m_1.copy()
         for leaf_node in tree.leaf_nodes:
             f_m[leaf_node.data_index] += learning_rate * leaf_node.predict_value
         return f_m
@@ -66,8 +67,6 @@ class GradientBoostClassifier():
         self.feature_importances_ = None
 
     def fit(self, X, Y):
-        N = len(X)
-        index = [True] * N
         n_classes = len(np.unique(Y))
         self.loss = BinomialDeviance(self.loss_type) if n_classes == 2 else MultinomialDeviance(self.loss_type)
         pred, self.c = self.loss.initialize(Y)
@@ -75,7 +74,7 @@ class GradientBoostClassifier():
         for m in range(self.n_estimators):
             residuals = self.loss.compute_residual(Y, pred)
 
-            tree = DecisionTreeClassifier(X=X, Y=residuals, label=Y, index=index, loss=self.loss, max_depth=self.max_depth)
+            tree = DecisionTreeClassifier(X=X, Y=residuals, label=Y, loss=self.loss, max_depth=self.max_depth)
 
             self.estimator_[m] = tree
 
