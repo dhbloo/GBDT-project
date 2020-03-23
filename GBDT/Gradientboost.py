@@ -16,13 +16,15 @@ class GradientBoostClassifier():
         self.pred = []
         self.loss = None
         self.n_classes = None
+        self.feature_num = None
         self.train_score = None
         self.estimator_ = {}
         self.f_m_estimator = {}
         self.max_depth = max_depth
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
-        self.feature_importances_ = None
+        self.feature_importance = None
+
 
     def fit(self, X, Y):
         N = len(X)
@@ -30,6 +32,7 @@ class GradientBoostClassifier():
         index = [True] * N
         n_classes = len(np.unique(Y))
 
+        self.feature_num = np.shape(X)[1]
         self.n_classes = n_classes
         self.loss = BinomialDeviance() if n_classes == 2 else MultinomialDeviance()
         #transform the label into onehot encoding
@@ -73,6 +76,7 @@ class GradientBoostClassifier():
             self.pred = prob.argmin(axis=1)
 
         self.train_score = np.sum(self.pred==Y_label)/len(Y_label)
+        self.feature_importance = self.get_feature_importances_()
 
     def predict_proba(self, X):
         f_m_estimator = {}
@@ -114,6 +118,22 @@ class GradientBoostClassifier():
             y_pred = y_prob.argmin(axis=1)
 
         return y_pred
+
+    def get_feature_importances_(self):
+        if self.n_classes == 2:
+            feat_importance = np.zeros(self.feature_num)
+        else:
+            feat_importance = np.zeros((self.n_classes, self.feature_num))
+        
+        for i in range(self.n_estimators):
+            if self.n_classes == 2:
+                feat_importance += self.estimator_[i].root.get_feature_importance()
+            else:
+                for c in range(self.n_classes):
+                    feat_importance[c] += self.estimator_[i][c].root.get_feature_importance()
+        self.feature_importance = feat_importance / self.n_estimators
+
+        return feat_importance / self.n_estimators
 
     def score(self, X, Y):
         y_pred = self.predict(X)

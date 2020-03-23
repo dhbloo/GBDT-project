@@ -2,7 +2,7 @@ import numpy as np
 
 class Node:
     def __init__(self, logger=None, split_feature=None, split_value=None, data_index=None, 
-    is_leaf=False, loss=None, depth=None):
+    is_leaf=False, loss=None, depth=None, feature_importance=None):
         self.loss = loss
         self.is_leaf = is_leaf
         self.max_depth = depth
@@ -12,7 +12,19 @@ class Node:
         self.data_index = data_index
         self.split_value = split_value
         self.split_feature = split_feature
+        self.feature_importance = feature_importance
         #self.logger = logger
+
+    def get_feature_importance(self):
+        feature_importances = np.zeros(len(self.feature_importance))
+        if self.is_leaf:
+            return self.feature_importance
+        else:
+            feature_importances += self.left_child.get_feature_importance()
+            feature_importances += self.right_child.get_feature_importance()
+            return self.feature_importance + feature_importances
+
+
 
     def update_predict_value(self, f_m, y):
         self.predict_value = self.loss.update_leaf_values(f_m, y)
@@ -45,11 +57,13 @@ class DecisionTreeClassifier:
             split_value = None
             split_feature = None
             features = np.shape(X)[1]
+            feature_importance = []
+            Gini_o = calcGini(Y)
 
             for feature in range(features):
+                Gini_feature = None
                 feat_X = X[ :, feature]
-                feat_values = np.unique(feat_X)
-
+                # calculate the Gini for each features
                 for feat_val in feat_X:
                     left_index = list(feat_X <= feat_val)
                     right_index = list(feat_X > feat_val)
@@ -59,6 +73,9 @@ class DecisionTreeClassifier:
                     Gini_i = np.sum((feat_X <= feat_val)+0)*left_Gini + np.sum((feat_X > feat_val)+0)*right_Gini
                     Gini_i = Gini_i / len(Y)
 
+                    if Gini_feature is None or Gini_i< Gini_feature:
+                        Gini_feature = Gini_i
+
                     if Gini is None or Gini_i < Gini:
                         Gini = Gini_i
                         split_value = feat_val
@@ -66,7 +83,10 @@ class DecisionTreeClassifier:
                         left_index_n = left_index
                         right_index_n = right_index
 
-            node = Node(self.logger, split_feature, split_value, loss=self.loss, data_index=index, depth=depth)
+                feature_importance.append((Gini_o - Gini_feature))
+            feature_importance = np.array(feature_importance)
+
+            node = Node(self.logger, split_feature, split_value, loss=self.loss, data_index=index, depth=depth, feature_importance=feature_importance)
 
             new_left_index = update_index(index, left_index_n)
             new_right_index = update_index(index, right_index_n)
@@ -76,7 +96,8 @@ class DecisionTreeClassifier:
 
             return node
         else:
-            node = Node(self.logger, is_leaf=True, loss=self.loss, data_index=index, depth=depth)
+            feature_importance = np.zeros(np.shape(X)[1])
+            node = Node(self.logger, is_leaf=True, loss=self.loss, data_index=index, depth=depth, feature_importance=feature_importance)
             node.update_predict_value(Y, label_n)
             self.leaf_nodes.append(node)
             return node
