@@ -21,7 +21,7 @@ class LossFunction(metaclass=abc.ABCMeta):
 class MeanSquareLoss(LossFunction):
     """ MSE Loss: L(y_i, f(x_i)) = (y - f(x_i))^2 """
     def init_f_0(self, y):
-        return np.zeros(len(y)) + np.mean(y)
+        return np.mean(y)
 
     def compute_residual(self, f, y):
         return 2 * (y - f)
@@ -30,7 +30,12 @@ class MeanSquareLoss(LossFunction):
         A = np.sum(pred * pred)
         B = -2 * np.sum(residuals * pred)
         C = np.sum(residuals * residuals)
-        return -B / (2 * A)
+        if np.isclose(A, 0) and np.isclose(B, 0):
+            return 0.0
+        elif np.isclose(A, 0):
+            return -C / B
+        else:
+            return -B / (2 * A)
 
     def compute_loss(self, f, y):
         return np.mean((y - f)**2)
@@ -39,7 +44,7 @@ class MeanSquareLoss(LossFunction):
 class LogisticLoss(LossFunction):
     """ Log Loss: L(y_i, f(x_i)) = -(y_i log(f(x_i)) + (1 - y_i) log(1 - f(x_i))) """
     def init_f_0(self, y):
-        return np.zeros(len(y)) + np.mean(y)
+        return np.mean(y)
 
     def compute_residual(self, f, y):
         return y - f
