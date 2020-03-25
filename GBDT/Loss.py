@@ -11,8 +11,8 @@ class LossFunction(metaclass=abc.ABCMeta):
     def compute_residual(self, f, y):
         """ Calculate residual r = -[dL(y_i, f(x_i))/df(x_i)] """
     @abc.abstractmethod
-    def compute_lambda(self, pred, residuals):
-        """ Calculate lambda that minimize Sum[L(y_i, F_m-1(x_i) + lambda * h(x_i))] """
+    def compute_gamma(self, pred, residuals):
+        """ Calculate gamma that minimize Sum[L(y_i, F_m-1(x_i) + gamma * h(x_i))] """
     @abc.abstractmethod
     def compute_loss(self, f, y):
         """ Calculate loss function """
@@ -26,7 +26,7 @@ class MeanSquareLoss(LossFunction):
     def compute_residual(self, f, y):
         return 2 * (y - f)
 
-    def compute_lambda(self, pred, residuals):
+    def compute_gamma(self, pred, residuals):
         A = np.sum(pred * pred)
         B = -2 * np.sum(residuals * pred)
         C = np.sum(residuals * residuals)
@@ -43,14 +43,16 @@ class MeanSquareLoss(LossFunction):
 
 class LogisticLoss(LossFunction):
     """ Log Loss: L(y_i, f(x_i)) = -(y_i log(f(x_i)) + (1 - y_i) log(1 - f(x_i))) """
+    """  """
     def init_f_0(self, y):
-        return np.mean(y)
+        Y = np.sum(y == 1) / len(y)
+        return np.log(Y / (1 - Y))
 
     def compute_residual(self, f, y):
-        return y - f
+        return y - 1 / (1 + np.exp(-f))
 
-    def compute_lambda(self, pred, residuals):
+    def compute_gamma(self, pred, residuals):
         return 1.0
 
     def compute_loss(self, f, y):
-        return 0.5 * (y - f)**2
+        return np.mean(y * np.log(1 + np.exp(-f)))
