@@ -5,6 +5,8 @@ from sklearn.utils.multiclass import unique_labels
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
 from .Loss import MeanSquareLoss, LogisticLoss
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import zero_one_loss
 
 losses = {'ls': MeanSquareLoss, 'deviance': LogisticLoss}
 
@@ -13,23 +15,29 @@ class GBDTRegressor(BaseEstimator, RegressorMixin):
     """ Gradient Boosting Decision Tree Regressor  """
     """ based on sklearn.DecisionTreeRegressor     """
     def __init__(self,
-                 n_estimators=100,
-                 learning_rate=0.1,
-                 loss='ls',
-                 subsample=1.0,
-                 tree_params=None,
-                 random_state=None):
+                n_estimators=100,
+                learning_rate=0.1,
+                loss='ls',
+                subsample=1.0,
+                tree_params=None,
+                random_state=None,
+                tol=None,
+                n_iter_no_change=2):
         assert n_estimators > 0
         assert loss in losses
 
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
         self.loss = loss
+        self.tol = tol
+        self.n_iter_no_change = n_iter_no_change
         self.subsample = subsample
         self.tree_params = tree_params
         self.random_state = random_state
 
     def fit(self, X, y):
+        if self.tol is not None and self.subsample==1.0:
+            self.subsample = 0.8
         # Ensure input is dense nparray
         X, y = check_X_y(X, y)
 
@@ -49,6 +57,10 @@ class GBDTRegressor(BaseEstimator, RegressorMixin):
         self.oob_improvement_ = np.zeros(self.n_estimators) if self.subsample < 1.0 else None
         subsample_count = int(np.ceil(len(X) * self.subsample))
         last_oob = loss.compute_loss(fm, y)
+
+        tol_init = self.tol
+        no_change_itr = 0
+        former_oob = last_oob
 
         for m in range(self.n_estimators):
             # Calc residuals at this iteration
@@ -80,8 +92,24 @@ class GBDTRegressor(BaseEstimator, RegressorMixin):
                 test_index = list(set(range(len(X))) - set(sub_index))
                 cur_oob = loss.compute_loss(fm[test_index], y[test_index])
                 self.oob_improvement_[m] = last_oob - cur_oob
+                former_oob = last_oob
                 last_oob = cur_oob
 
+            #early stopping
+            if m % 10 == 0 and m > 300 and self.tol is not None:
+                if cur_oob > (former_oob + self.tol):
+                    no_change_itr += 1
+                    self.tol /= 2
+                else:
+                    no_change_itr = 0
+                    self.tol = tol_init
+                
+                if no_change_itr == 2:
+                    self.n_estimators = m
+                    print("early stopping in round {}, best round is {}, M = {}".format(m, m - 20, self.n_estimators))
+                    # print("loss: ", later_loss)
+                    break
+                former_oob = cur_oob
             # Append estimator
             self.estimator_[m] = tree
 
@@ -91,7 +119,6 @@ class GBDTRegressor(BaseEstimator, RegressorMixin):
         return self
 
     def predict(self, X):
-        check_is_fitted(self)
         X = check_array(X)
 
         fm = np.zeros(len(X)) + self.f0_
@@ -103,7 +130,6 @@ class GBDTRegressor(BaseEstimator, RegressorMixin):
 
     def staged_predict(self, X):
         """ Return a generator for prediction at each iteration """
-        check_is_fitted(self)
         X = check_array(X)
 
         fm = np.zeros(len(X)) + self.f0_
@@ -124,18 +150,24 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
                  loss='deviance',
                  subsample=1.0,
                  tree_params=None,
-                 random_state=None):
+                 random_state=None,
+                 tol=None,
+                 n_iter_no_change=2):
         assert n_estimators > 0
         assert loss in losses
 
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
         self.loss = loss
+        self.tol = tol
+        self.n_iter_no_change = n_iter_no_change
         self.subsample = subsample
         self.tree_params = tree_params
         self.random_state = random_state
 
     def fit(self, X, y):
+        if self.tol is not None and self.subsample==1.0:
+            self.subsample = 0.8
         # Ensure input is dense nparray
         X, y = check_X_y(X, y)
         # Store the classes seen during fit
@@ -162,8 +194,10 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
         self.oob_improvement_ = np.zeros(self.n_estimators) if self.subsample < 1.0 else None
         subsample_count = int(np.ceil(len(X) * self.subsample))
         last_oob = loss.compute_loss(fm, y)
-        if n_classes == 1:
-            last_oob += loss.compute_loss(-fm, 1 - y)
+
+        tol_init = self.tol
+        no_change_itr = 0
+        former_oob = last_oob
 
         for m in range(self.n_estimators):
             # Choose a subsample of dataset
@@ -195,8 +229,6 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
 
                 # Record train score
                 self.train_score_[m] += loss.compute_loss(fm[i_class], y_classes[i_class])
-                if n_classes == 1:
-                    self.train_score_[m] += loss.compute_loss(-fm[i_class], 1 - y_classes[i_class])
 
                 # Append estimator for this class
                 self.estimator_[m][i_class] = tree
@@ -204,13 +236,30 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
                 # Calculate out-of-bag error
                 if self.subsample < 1.0:
                     cur_oob += loss.compute_loss(fm[i_class][test_index], y_classes[i_class][test_index])
-                    if n_classes == 1:
-                        cur_oob += loss.compute_loss(-fm[i_class][test_index], 1 - y_classes[i_class][test_index])
 
             # Record out-of-bag error
             if self.subsample < 1.0:
                 self.oob_improvement_[m] = last_oob - cur_oob
+                former_oob = last_oob
                 last_oob = cur_oob
+            
+            #early stopping
+            if m % 10 == 0 and m > 300 and self.tol is not None:
+                if cur_oob > (former_oob + self.tol):
+                    no_change_itr += 1
+                    self.tol /= 2
+                else:
+                    no_change_itr = 0
+                    self.tol = tol_init
+                
+                if no_change_itr == 2:
+                    self.n_estimators = m
+                    print("early stopping in round {}, best round is {}, M = {}".format(m, m - 20, self.n_estimators))
+                    # print("loss: ", later_loss)
+                    break
+                former_oob = cur_oob
+
+
 
         # Get average feature importance
         self.feature_importances_ /= (self.n_estimators * n_classes)
@@ -229,7 +278,6 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
             return np.apply_along_axis(lambda i: self.classes_[i], 0, index)
 
     def predict_log_proba(self, X):
-        check_is_fitted(self)
         X = check_array(X)
         n_classes = 1 if len(self.classes_) == 2 else len(self.classes_)
 
@@ -253,7 +301,6 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
 
     def staged_predict_log_proba(self, X):
         """ Return a generator for prediction at each iteration """
-        check_is_fitted(self)
         X = check_array(X)
         n_classes = 1 if len(self.classes_) == 2 else len(self.classes_)
 
@@ -268,7 +315,6 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
 
     def staged_predict_proba(self, X):
         """ Return a generator for prediction at each iteration """
-        check_is_fitted(self)
         X = check_array(X)
         n_classes = 1 if len(self.classes_) == 2 else len(self.classes_)
 
@@ -283,7 +329,6 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
 
     def staged_predict(self, X):
         """ Return a generator for prediction at each iteration """
-        check_is_fitted(self)
         X = check_array(X)
         n_classes = 1 if len(self.classes_) == 2 else len(self.classes_)
 
