@@ -162,6 +162,8 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
         self.oob_improvement_ = np.zeros(self.n_estimators) if self.subsample < 1.0 else None
         subsample_count = int(np.ceil(len(X) * self.subsample))
         last_oob = loss.compute_loss(fm, y)
+        if n_classes == 1:
+            last_oob += loss.compute_loss(-fm, 1 - y)
 
         for m in range(self.n_estimators):
             # Choose a subsample of dataset
@@ -193,6 +195,8 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
 
                 # Record train score
                 self.train_score_[m] += loss.compute_loss(fm[i_class], y_classes[i_class])
+                if n_classes == 1:
+                    self.train_score_[m] += loss.compute_loss(-fm[i_class], 1 - y_classes[i_class])
 
                 # Append estimator for this class
                 self.estimator_[m][i_class] = tree
@@ -200,6 +204,8 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
                 # Calculate out-of-bag error
                 if self.subsample < 1.0:
                     cur_oob += loss.compute_loss(fm[i_class][test_index], y_classes[i_class][test_index])
+                    if n_classes == 1:
+                        cur_oob += loss.compute_loss(-fm[i_class][test_index], 1 - y_classes[i_class][test_index])
 
             # Record out-of-bag error
             if self.subsample < 1.0:
