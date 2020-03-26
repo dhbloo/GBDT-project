@@ -166,8 +166,6 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
         self.random_state = random_state
 
     def fit(self, X, y):
-        if self.tol is not None and self.subsample==1.0:
-            self.subsample = 0.8
         # Ensure input is dense nparray
         X, y = check_X_y(X, y)
         # Store the classes seen during fit
@@ -250,7 +248,7 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
                 former_oob = last_oob
                 last_oob = cur_oob
             
-            #early stopping
+            # Early stopping if condition meets
             if m % 10 == 0 and m > 300 and self.n_iter_no_change is not None:
                 if cur_oob > (former_oob + self.tol):
                     no_change_itr += 1
@@ -262,7 +260,7 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
                 if no_change_itr == self.n_iter_no_change:
                     self.n_estimators_ = m
                     print("early stopping in round {}, best round is {}, M = {}".format(m, m - 20, self.n_estimators))
-                    # print("loss: ", later_loss)
+
                     self.estimator_ = self.estimator_[0:self.n_estimators_,:]
                     self.gammas_ = self.gammas_[0:self.n_estimators_,:]
                     self.train_score_ = self.train_score_[0:self.n_estimators_]
@@ -277,9 +275,10 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
 
     def _get_y_class(self, fm):
         if len(fm) == 1:
+            # Binary output
             return np.apply_along_axis(lambda x: self.classes_[0 if x < 0.5 else 1], 0, fm)
         else:
-            # softmax
+            # Softmax for multiclass output
             fm = np.exp(fm)
             fm = fm / fm.sum(axis=0)
 

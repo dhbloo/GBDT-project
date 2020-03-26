@@ -43,17 +43,20 @@ class MeanSquareLoss(LossFunction):
 
 class LogisticLoss(LossFunction):
     """ Log Loss: L(y_i, f(x_i)) = -(y_i log(f(x_i)) + (1 - y_i) log(1 - f(x_i))) """
-    """  """
+    """ Equivalent form(cross entropy): L = Sum(y * log(1 + e^(-log of odds))) """
+    """ y should be binary class """
     def init_f_0(self, y):
         Y = np.sum(y == 1) / len(y)
         return np.log(Y / (1 - Y))
 
     def compute_residual(self, f, y):
+        """ Residual = y - predicted probability = y - 1 / (1 + e^(- log of odds)) """
         return y - 1 / (1 + np.exp(-f))
 
     def compute_gamma(self, pred, residuals):
+        """ Unimplemented """
         return 1.0
 
     def compute_loss(self, f, y):
         return np.mean(y * np.log(1 + np.exp(-f)))
-        #return np.mean(y * f - np.log(1 + np.exp(f)))
+        # return np.mean(y * f - np.log(1 + np.exp(f)))
