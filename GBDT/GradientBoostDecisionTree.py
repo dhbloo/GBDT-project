@@ -151,8 +151,8 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
                  subsample=1.0,
                  tree_params=None,
                  random_state=None,
-                 tol=None,
-                 n_iter_no_change=2):
+                 tol=1e-4,
+                 n_iter_no_change=None):
         assert n_estimators > 0
         assert loss in losses
 
@@ -192,8 +192,11 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
         self.train_score_ = np.zeros(self.n_estimators)
         self.feature_importances_ = np.zeros(X.shape[1])
         self.oob_improvement_ = np.zeros(self.n_estimators) if self.subsample < 1.0 else None
+        self.n_estimators_ = self.n_estimators
         subsample_count = int(np.ceil(len(X) * self.subsample))
         last_oob = loss.compute_loss(fm, y)
+        if n_classes == 1:
+            last_oob += loss.compute_loss(-fm, 1 - y)
 
         tol_init = self.tol
         no_change_itr = 0
@@ -229,6 +232,8 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
 
                 # Record train score
                 self.train_score_[m] += loss.compute_loss(fm[i_class], y_classes[i_class])
+                if n_classes == 1:
+                    self.train_score_[m] += loss.compute_loss(-fm[i_class], 1 - y_classes[i_class])
 
                 # Append estimator for this class
                 self.estimator_[m][i_class] = tree
@@ -236,6 +241,8 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
                 # Calculate out-of-bag error
                 if self.subsample < 1.0:
                     cur_oob += loss.compute_loss(fm[i_class][test_index], y_classes[i_class][test_index])
+                    if n_classes == 1:
+                        cur_oob += loss.compute_loss(-fm[i_class][test_index], 1 - y_classes[i_class][test_index])
 
             # Record out-of-bag error
             if self.subsample < 1.0:
@@ -244,7 +251,7 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
                 last_oob = cur_oob
             
             #early stopping
-            if m % 10 == 0 and m > 300 and self.tol is not None:
+            if m % 10 == 0 and m > 300 and self.n_iter_no_change is not None:
                 if cur_oob > (former_oob + self.tol):
                     no_change_itr += 1
                     self.tol /= 2
@@ -252,17 +259,19 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
                     no_change_itr = 0
                     self.tol = tol_init
                 
-                if no_change_itr == 2:
-                    self.n_estimators = m
+                if no_change_itr == self.n_iter_no_change:
+                    self.n_estimators_ = m
                     print("early stopping in round {}, best round is {}, M = {}".format(m, m - 20, self.n_estimators))
                     # print("loss: ", later_loss)
+                    self.estimator_ = self.estimator_[0:self.n_estimators_,:]
+                    self.gammas_ = self.gammas_[0:self.n_estimators_,:]
+                    self.train_score_ = self.train_score_[0:self.n_estimators_]
+                    self.oob_improvement_ = self.oob_improvement_[0:self.n_estimators_]
                     break
                 former_oob = cur_oob
 
-
-
         # Get average feature importance
-        self.feature_importances_ /= (self.n_estimators * n_classes)
+        self.feature_importances_ /= (self.n_estimators_ * n_classes)
 
         return self
 
@@ -283,7 +292,7 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
 
         fm = np.zeros((n_classes, len(X))) + self.f0_.reshape(n_classes, -1)
 
-        for m in range(self.n_estimators):
+        for m in range(self.n_estimators_):
             for i_class in range(n_classes):
                 fm[i_class] += self.gammas_[m][i_class] * self.estimator_[m][i_class].predict(X)
 
@@ -306,7 +315,7 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
 
         fm = np.zeros((n_classes, len(X))) + self.f0_.reshape(n_classes, -1)
 
-        for m in range(self.n_estimators):
+        for m in range(self.n_estimators_):
             yield fm.T
             for i_class in range(n_classes):
                 fm[i_class] += self.gammas_[m][i_class] * self.estimator_[m][i_class].predict(X)
@@ -320,7 +329,7 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
 
         fm = np.zeros((n_classes, len(X))) + self.f0_.reshape(n_classes, -1)
 
-        for m in range(self.n_estimators):
+        for m in range(self.n_estimators_):
             yield (np.exp(fm) / (1 + np.exp(fm))).T
             for i_class in range(n_classes):
                 fm[i_class] += self.gammas_[m][i_class] * self.estimator_[m][i_class].predict(X)
@@ -334,7 +343,7 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
 
         fm = np.zeros((n_classes, len(X))) + self.f0_.reshape(n_classes, -1)
 
-        for m in range(self.n_estimators):
+        for m in range(self.n_estimators_):
             yield self._get_y_class(np.exp(fm) / (1 + np.exp(fm)))
             for i_class in range(n_classes):
                 fm[i_class] += self.gammas_[m][i_class] * self.estimator_[m][i_class].predict(X)
