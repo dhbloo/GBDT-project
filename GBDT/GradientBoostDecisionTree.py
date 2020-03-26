@@ -153,7 +153,6 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
 
         # Initialize f_0 by minimize loss function
         self.f0_ = np.array([loss.init_f_0(y) for y in y_classes])
-        print(self.f0_)
         fm = np.zeros((n_classes, len(y))) + self.f0_.reshape(n_classes, -1)
 
         self.estimator_ = np.empty((self.n_estimators, n_classes), dtype=DecisionTreeRegressor)
@@ -217,7 +216,8 @@ class GBDTClassifier(BaseEstimator, ClassifierMixin):
             return np.apply_along_axis(lambda x: self.classes_[0 if x < 0.5 else 1], 0, fm)
         else:
             # softmax
-            fm = np.exp(fm) / fm.sum(axis=0)
+            fm = np.exp(fm)
+            fm = fm / fm.sum(axis=0)
 
             index = np.argmax(fm, axis=0)
             return np.apply_along_axis(lambda i: self.classes_[i], 0, index)

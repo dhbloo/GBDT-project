@@ -56,3 +56,4 @@ class LogisticLoss(LossFunction):
 
     def compute_loss(self, f, y):
         return np.mean(y * np.log(1 + np.exp(-f)))
+        #return np.mean(y * f - np.log(1 + np.exp(f)))
