@@ -1,2 +1,2 @@
-from .Loss import MeanSquareLoss, LogisticLoss
-from .GradientBoostDecisionTree import GBDTRegressor, GBDTClassifier
+from .mytree import DecisionTreeClassifier
+from .Gradientboost import GradientBoostClassifier

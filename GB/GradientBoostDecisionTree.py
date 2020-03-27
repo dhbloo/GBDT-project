@@ -119,6 +119,7 @@ class GBDTRegressor(BaseEstimator, RegressorMixin):
         return self
 
     def predict(self, X):
+        check_is_fitted(self)
         X = check_array(X)
 
         fm = np.zeros(len(X)) + self.f0_
@@ -130,6 +131,7 @@ class GBDTRegressor(BaseEstimator, RegressorMixin):
 
     def staged_predict(self, X):
         """ Return a generator for prediction at each iteration """
+        check_is_fitted(self)
         X = check_array(X)
 
         fm = np.zeros(len(X)) + self.f0_
